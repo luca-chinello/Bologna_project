@@ -12,6 +12,7 @@ names(nodes_sf)
 
 # 2. Creating the net from the existing edges
 net <- as_sfnetwork(edges_sf, directed = FALSE)
+saveRDS(net, file = "02-data/bologna_net.rds")
 
 net <- net %>% 
   activate("nodes") %>% 
