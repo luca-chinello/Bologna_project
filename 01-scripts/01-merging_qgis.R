@@ -12,11 +12,12 @@ names(nodes_sf)
 
 # 2. Creating the net from the existing edges
 net <- as_sfnetwork(edges_sf, directed = FALSE)
-saveRDS(net, file = "02-data/bologna_net.rds")
 
 net <- net %>% 
   activate("nodes") %>% 
   st_join(nodes_sf, join = st_nearest_feature)
+
+saveRDS(net, file = "02-data/bologna_net.rds")
 
 # 3. Activating nodes and edges, dropping the geometry to let igraph work better
 nodes_for_igraph <- net %>% 
