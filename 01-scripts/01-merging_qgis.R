@@ -3,19 +3,33 @@ rm(list = ls())
 library(sf)
 library(sfnetworks)
 library(dplyr)
+library(igraph)
 
 # 1. Loading the QGIS file
 nodes_sf <- st_read("02-data/Bologna_Rete_Finale.gpkg", layer = "nodes")
 edges_sf <- st_read("02-data/Bologna_Rete_Finale.gpkg", layer = "edges")
 
 names(nodes_sf)
+nodes_sf$qgis_id <- nodes_sf$node_id
+nodes_sf <- nodes_sf |> 
+  relocate(node_id) |> 
+  select(where(~!all(is.na(.))))
 
 # 2. Creating the net from the existing edges
 net <- as_sfnetwork(edges_sf, directed = FALSE)
 
-net <- net %>% 
-  activate("nodes") %>% 
-  st_join(nodes_sf, join = st_nearest_feature)
+zone_urbanistiche <- st_read("02-data/zone_urbanistiche.geojson")
+zone_urbanistiche <- st_transform(zone_urbanistiche, 32632)
+head(zone_urbanistiche$zona_prossimita)
+
+net <- net |> 
+  activate("nodes") |> 
+  st_join(nodes_sf, join = st_nearest_feature) |> 
+  st_join(zone_urbanistiche |>  select(zona_prossimita), join = st_intersects) |> 
+  mutate(name = as.character(qgis_id))
+
+vertex_attr_names(net)
+head(V(net)$name)
 
 saveRDS(net, file = "02-data/bologna_net.rds")
 
@@ -42,7 +56,7 @@ bologna_graph <- graph_from_data_frame(
   directed = FALSE
 )
 
-vertex_attr_names(bologna_graph)
+vertex_attr_names(net)
 saveRDS(bologna_graph, file = "02-data/bologna_graph.rds")
 
 # -----------
