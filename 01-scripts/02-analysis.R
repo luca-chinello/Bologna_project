@@ -180,7 +180,7 @@ LP_plot <- ggplot() +
 print(LP_plot)
 # ggsave("03-outputs/LP_plot.png", plot = LP_plot, width = 8, height = 6)
 
-# 4. Girvan-Newman algorithm -----------------------------
+# 3 Girvan-Newman algorithm -----------------------------
 set.seed(123)
 GN <- readRDS("02-data/GN.rds")
 # GN <- cluster_edge_betweenness(bologna_graph, weights = E(bologna_graph)$weight) # GN algorithm is based on weight
@@ -213,7 +213,7 @@ plot_GN <- ggplot() +
 print(plot_GN)
 # ggsave("03-outputs/plot_GN.png", plot = plot_GN, width = 8, height = 6)
 
-# 4. Girvan-Newman BINARY algorithm -----------------------------
+# 4 Girvan-Newman BINARY algorithm -----------------------------
 set.seed(123)
 GN_bin <- readRDS("02-data/GN_bin.rds")
 # GN_bin <- cluster_edge_betweenness(bologna_graph, weights = NULL)
@@ -350,26 +350,41 @@ df_long <- t_plot |>
   pivot_longer(
     cols = -quartiere,  
     names_to = "Cluster",       
-    values_to = "Proporzione" 
+    values_to = "Proporzione"
   )
 
+cluster_order <- df_long |> 
+  group_by(Cluster) |>
+  slice_max(order_by = Proporzione, n = 1, with_ties = FALSE) |>
+  arrange(quartiere, Cluster) |> 
+  pull(Cluster)
+
 df_long <- df_long |> 
-  mutate(Cluster_num = as.numeric(as.character(Cluster))) |> 
-  arrange(Cluster_num) |> 
-  mutate(Cluster = factor(Cluster, levels = unique(Cluster[order(Cluster_num)])))
+  mutate(Cluster = factor(Cluster, levels = cluster_order)) |>
+  mutate(Proporzione_long = ifelse(Proporzione <= 0, NA, Proporzione))
 
 # TABLE plot
-crosstab_plot <-  ggplot(df_long, aes(x = Cluster, y = quartiere, fill = Proporzione)) +
-  geom_tile(color = "white") +
-  scale_fill_viridis_c(option = "magma", labels = scales::percent) +
+crosstab_plot <-  ggplot(df_long, aes(x = Cluster, y = quartiere, fill = Proporzione_long)) +
+  geom_tile(color = "white", linewidth = 0.1) +
+  scale_fill_viridis_c(
+    option = "cividis", 
+    labels = scales::percent,
+    na.value = "white",
+    begin = 0.9,
+    end = 0,  
+    limits = c(0.001, 1)
+  ) +
   theme_minimal() +
   labs(
-    title = "Morphological overimposing of Neighbourhoods and Clusters (GN Main Component)",
+    title = "Morphological matching of Neighbourhoods and Clusters (GN Main Component)",
     x = "41 Clusters (Girvan-Newman)",
     y = "6 Neighbourhoods",
-    fill = "Memebership %"
+    fill = "Matching %"
   ) +
-  theme(axis.text.x = element_text(angle = 90, size = 6))
+  theme(axis.text.x = element_text(angle = 90, size = 6),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid = element_blank()
+        )
 
 print(crosstab_plot)
 # ggsave("03-outputs/crosstab_plot.png", plot = crosstab_plot, width = 8, height = 6)
@@ -451,6 +466,24 @@ aov_GN90 <- aov(reddito ~ cluster_90, data = data_anova)
 model_GN_giant <- lm(reddito ~ community_GN_giant, data = data_anova)
 aov_GN_giant <- aov(reddito ~ community_GN_giant, data = data_anova)
 
+summary(model_quartieri)
+summary(model_GN6)
+summary(aov_quartieri)
+summary(aov_GN6)
+
+summary(model_zone)
+summary(model_GN25)
+summary(aov_zone)
+summary(aov_GN25)
+
+summary(model_aree)
+summary(model_GN90)
+summary(aov_aree)
+summary(aov_GN90)
+summary(model_GN_giant)
+
+summary(aov_GN_giant)
+
 # Results
 anova_results <- data.frame(
   model_anova = c("Quartieri (6)", "GN_6", "Zone di Prossimità (25)", "GN_25", 
@@ -468,12 +501,16 @@ anova_results <- data.frame(
 
 print(anova_results)
 
+
 # Plots ANOVA (Zone prossimità, GN_25 e GN Main Component)
+data_anova <- data_anova |> 
+  filter(!is.na(zona_prossimita))
+
 boxplot_zone <- ggplot(data_anova, aes(x = reorder(zona_prossimita, reddito, median), y = reddito)) +
-  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.size = 0.5) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.size = 0.5, na.rm = TRUE) +
   coord_flip() +
   theme_minimal() +
-  labs(title = "Median income distribution - administrative 25 proximity zones",
+  labs(title = "Median income dist. - 25 proximity zones",
        x = "Official Zones", y = "Median income")
 
 print(boxplot_zone)
@@ -481,10 +518,10 @@ print(boxplot_zone)
 
 
 boxplot_GN_25 <- ggplot(data_anova, aes(x = reorder(cluster_25, reddito, median), y = reddito)) +
-  geom_boxplot(fill = "firebrick", alpha = 0.7, outlier.size = 0.5) +
+  geom_boxplot(fill = "firebrick", alpha = 0.7, outlier.size = 0.5, na.rm = TRUE) +
   coord_flip() +
   theme_minimal() +
-  labs(title = "Median income distribution - cluster GN_25",
+  labs(title = "Median income dist. - GN_25",
        x = "Morphological clusters (GN)", y = "Median income")
 
 print(boxplot_GN_25)
@@ -548,7 +585,7 @@ print(income_per_clusters)
 
 
 # PLOT node degree by cluster
-V(bologna_giant)$degree <- degree(bologna_giant)
+V(bologna_giant)$degree <- as.numeric(degree(bologna_giant))
 
 df_degree <- data.frame(
   name = as.character(V(bologna_giant)$name),
@@ -578,6 +615,37 @@ degree_per_clusters <- ggplot() +
 
 # ggsave("03-outputs/degree_per_clusters.png", plot = degree_per_clusters, width = 8, height = 6)
 print(degree_per_clusters)
+
+
+# PLOT: avg node degree in 25 proximity zones
+node_data <- as_tibble(igraph::as_data_frame(bologna_giant, what = "vertices"))
+
+zone_stats <- node_data |>
+  filter(!is.na(reddito)) |>
+  filter(!is.na(zona_prossimita)) |> 
+  group_by(zona_prossimita) |>
+  summarise(
+    avg_degree = mean(degree, na.rm = TRUE),
+    median_income = mean(reddito, na.rm = TRUE),
+    n_nodes = n()
+  )
+
+node_25_scatter <- ggplot(zone_stats, aes(x = avg_degree, y = median_income)) +
+  geom_point(aes(size = n_nodes, color = n_nodes), alpha = 0.7) +
+  geom_text(aes(label = zona_prossimita), check_overlap = TRUE, vjust = -1, size = 3) +
+  theme_minimal() +
+  labs(
+    title = "Connectivity vs. Median Income",
+    subtitle = "Average Node Degree vs. Median Income (25 Proximity Zones)",
+    x = "Mean Node Degree",
+    y = "Median Income (€)",
+    size = "Number of nodes",
+    color = "Number of nodes"
+  ) +
+  scale_y_continuous(labels = scales::dollar_format(suffix = " €", prefix = ""))
+
+print(node_25_scatter)
+# ggsave("03-outputs/node_25_scatter.png", plot = node_25_scatter, width = 8, height = 6)
 
 
 # ERGM implementation -----------------------------
@@ -615,9 +683,9 @@ bologna_net_ergm
 network::get.vertex.attribute(bologna_net_ergm, "reddito") |> head()
 
 set.seed(123)
-ergm_model <- ergm(bologna_net_ergm ~ edges + 
-                          nodecov("reddito") + 
-                          absdiff("reddito"),
+ergm_model <- ergm(bologna_net_ergm ~ edges +
+                     absdiff("reddito")+
+                     nodecov("reddito"),
                         control = control.ergm(
                           MCMLE.maxit = 15, 
                           parallel = 6
@@ -680,6 +748,60 @@ print(plot_transit)
 # ggsave("03-outputs/plot_transit.png", plot = plot_transit, width = 8, height = 6)
 
 
+# Nodal Density check
+zone_urbanistiche <- st_read("02-data/zone_urbanistiche.geojson") |> 
+  st_transform(32632) |> 
+  filter(!is.na(zona_prossimita)) |> 
+  mutate(area_km2 = as.numeric(st_area(geometry)) / 1000000)
+
+# 2. AGGREGAZIONE: Qui prendiamo SIA il numero di nodi SIA il reddito medio
+# Assumiamo che il tuo dataframe con i nodi si chiami 'node_data'
+# e che la colonna del reddito si chiami 'reddito'
+node_stats <- node_data |>
+  filter(!is.na(zona_prossimita)) |> 
+  group_by(zona_prossimita) |> 
+  summarise(
+    n_nodes = n(),
+    avg_income = mean(reddito, na.rm = TRUE) # <--- QUESTO È IL PEZZO MANCANTE!
+  )
+
+# 3. UNISCI I DATI (Join tra Poligoni e Statistiche dei Nodi)
+density_stats <- zone_urbanistiche |> 
+  left_join(node_stats, by = "zona_prossimita") |> 
+  mutate(node_density = n_nodes / area_km2)
+
+# 4. RISULTATO FINALE: Ora includiamo anche 'avg_income'
+density_final <- density_stats |> 
+  st_drop_geometry() |> # Rimuoviamo la geometria per visualizzare meglio la tabella
+  select(zona_prossimita, n_nodes, area_km2, node_density, avg_income) |> 
+  arrange(desc(node_density))
+
+# Controlla se ora avg_income compare
+summary(density_final)
+
+# PLOT
+library(ggrepel)
+library(ggplot2)
+
+
+node_dens <- ggplot(density_final, aes(x = node_density, y = avg_income)) +
+  # Aggiungiamo i punti con dimensione basata sul numero di nodi
+  geom_point(aes(size = n_nodes), color = "lightblue", alpha = 0.8) +
+  # Etichette per le zone (solo le più estreme per non affollare)
+  geom_text_repel(aes(label = zona_prossimita), size = 3, max.overlaps = 10) +
+  # Scala colori professionale
+  scale_color_viridis_c(option = "mako", direction = -1) +
+  theme_minimal() +
+  labs(
+    title = "Density vs. Median Income",
+    subtitle = "Inverse correlation between urban permeability (nodes/km²) and median income",
+    x = "Nodal Density (Intersections per km²)",
+    y = "Median Income (€)",
+    size = "Nodes number"
+  )
+
+print(node_dens)
+# ggsave("03-outputs/node_density.png", plot = node_dens, width = 8, height = 6)
 
 mean(degree(bologna_graph))
 edge_density(bologna_graph)
